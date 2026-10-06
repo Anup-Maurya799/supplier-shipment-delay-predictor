@@ -1,4 +1,4 @@
-import os
+
 from pathlib import Path
 from datetime import date
 
@@ -73,8 +73,10 @@ st.markdown(
     .section-title { font-size:22px; font-weight:750; color:#0F172A; margin-top:25px; margin-bottom:15px; }
     .ai-result { padding:25px; border-radius:16px; margin-top:20px; background:#FFFFFF; border:1px solid #E2E8F0; }
     .ai-label { color:#64748B; font-size:14px; font-weight:600; }
-    .ai-value { color:#0F172A; font-size:30px; font-weight:800; margin-top:5px; }
+    .ai-value {  color:#0F172A !important; font-size:30px; font-weight:800; margin-top:5px; }
     .info-box { padding:18px; border-radius:12px; background:#FFFFFF; border:1px solid #E2E8F0; color:#475569; line-height:1.6; }
+    .input-guide-label { color:#0F172A; font-size:13px; font-weight:700; margin:0 0 5px 2px; line-height:1.35; }
+    .input-guide-label span { color:#64748B; font-weight:500; }
     .footer { text-align:center; color:#94A3B8; padding:30px; font-size:13px; }
 
     /* -------------------------------------------------------
@@ -311,6 +313,13 @@ def section_title(title):
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
 
 
+def input_guide(title, measure):
+    st.markdown(
+        f'<div class="input-guide-label">{title} <span>— {measure}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def page_header(title, subtitle):
     st.markdown(
         f'<div class="page-header"><div class="main-title">{title}</div>'
@@ -363,7 +372,7 @@ if page == "📊 Executive Dashboard":
     with c1: kpi_card("TOTAL SHIPMENTS", f"{total_shipments:,}", "Records analyzed")
     with c2: kpi_card("DELAYED SHIPMENTS", f"{delayed_shipments:,}", "Recorded delayed shipments")
     with c3: kpi_card("DELAY RATE", f"{delay_rate:.1f}%", "Observed dataset rate")
-    with c4: kpi_card("AVG WAITING TIME", f"{avg_waiting:.1f}", "Average waiting time")
+    with c4: kpi_card("AVG WAITING TIME", f"{avg_waiting:.1f}", "Dataset time unit")
 
     section_title("Shipment Performance Overview")
     c1, c2 = st.columns(2)
@@ -397,7 +406,16 @@ if page == "📊 Executive Dashboard":
         df[display_columns].head(15),
         use_container_width=True,
         hide_index=True,
-        column_config={c: st.column_config.Column(width="small") for c in display_columns},
+        column_config={
+            "Timestamp": st.column_config.Column("Timestamp"),
+            "Asset_ID": st.column_config.Column("Asset / Supplier ID"),
+            "Shipment_Status": st.column_config.Column("Shipment Status"),
+            "Traffic_Status": st.column_config.Column("Traffic Status"),
+            "Temperature": st.column_config.Column("Temperature (°C)"),
+            "Humidity": st.column_config.Column("Humidity (%)"),
+            "Waiting_Time": st.column_config.Column("Waiting Time (dataset time unit)"),
+            "Logistics_Delay": st.column_config.Column("Delay Flag / Value"),
+        },
     )
 
 # ============================================================
@@ -411,22 +429,26 @@ elif page == "🔮 Delay Predictor":
     # Equal-height weather input cards
     with wc1:
         with st.container(border=True, height=105):
+            input_guide("Weather Latitude", "geographic coordinate in degrees (°)")
             weather_lat = st.number_input(
                 "Weather Latitude",
                 value=20.5,
                 min_value=-90.0,
                 max_value=90.0,
                 key="weather_lat_pred",
+                label_visibility="collapsed",
             )
 
     with wc2:
         with st.container(border=True, height=105):
+            input_guide("Weather Longitude", "geographic coordinate in degrees (°)")
             weather_lon = st.number_input(
                 "Weather Longitude",
                 value=72.9,
                 min_value=-180.0,
                 max_value=180.0,
                 key="weather_lon_pred",
+                label_visibility="collapsed",
             )
 
     with wc3:
@@ -454,20 +476,132 @@ elif page == "🔮 Delay Predictor":
 
     with st.form("prediction_form"):
         c1, c2 = st.columns(2)
+        # Input fields include units / measurement notes so users can understand
+        # exactly what each value represents. These labels/help texts do not
+        # change the model inputs or prediction logic.
+       
+
+        with st.expander("Measurement Guide — What do these values mean?", expanded=False):
+            st.markdown(
+                """
+                **Physical / standard units**
+                - Latitude / Longitude → degrees (°)
+                - Temperature → degrees Celsius (°C)
+                - Humidity → percentage (%)
+                - Asset Utilization → percentage (%)
+                - Shipment Date → calendar date
+
+                **Dataset-defined measurements**
+                - Inventory Level → dataset-defined quantity; no physical unit is assumed
+                - Demand Forecast → dataset-defined demand units
+                - Waiting Time → dataset-defined time unit; the dashboard does not assume minutes or hours
+                - Transaction Amount → dataset-defined currency; the dashboard does not assume INR/USD
+                - Purchase Frequency → dataset-defined period/frequency
+                - Asset / Supplier ID → identifier; no unit
+
+                **After prediction:** the model uses these inputs plus derived date/risk features to estimate delay probability.
+                """
+            )
+
         with c1:
-            asset_id = st.text_input("Asset / Supplier ID", value="Truck_1")
-            latitude = st.number_input("Latitude", value=20.5, min_value=-90.0, max_value=90.0)
-            longitude = st.number_input("Longitude", value=72.9, min_value=-180.0, max_value=180.0)
-            inventory = st.number_input("Inventory Level", min_value=0.0, value=500.0)
-            asset_utilization = st.number_input("Asset Utilization (%)", min_value=0.0, max_value=100.0, value=80.0)
-            demand_forecast = st.number_input("Demand Forecast", min_value=0.0, value=200.0)
+            input_guide("Asset / Supplier ID", "identifier; no measurement unit")
+            asset_id = st.text_input(
+                "Asset / Supplier ID",
+                value="Truck_1",
+                help="Identifier of the vehicle, supplier asset, or logistics resource. No measurement unit.",
+                label_visibility="collapsed",
+            )
+            input_guide("Latitude", "north-south geographic coordinate in degrees (°)")
+            latitude = st.number_input(
+                "Latitude (°)",
+                value=20.5,
+                min_value=-90.0,
+                max_value=90.0,
+                help="North-south geographic coordinate. Measured in degrees (°). Valid range: -90° to +90°.",
+                label_visibility="collapsed",
+            )
+            input_guide("Longitude", "east-west geographic coordinate in degrees (°)")
+            longitude = st.number_input(
+                "Longitude (°)",
+                value=72.9,
+                min_value=-180.0,
+                max_value=180.0,
+                help="East-west geographic coordinate. Measured in degrees (°). Valid range: -180° to +180°.",
+                label_visibility="collapsed",
+            )
+            input_guide("Inventory Level", "dataset-defined quantity; no physical unit is specified")
+            inventory = st.number_input(
+                "Inventory Level (dataset units)",
+                min_value=0.0,
+                value=500.0,
+                help="Quantity of inventory associated with the shipment. The source dataset does not specify a physical unit such as kg or boxes.",
+                label_visibility="collapsed",
+            )
+            input_guide("Asset Utilization", "percentage of asset usage/capacity (%)")
+            asset_utilization = st.number_input(
+                "Asset Utilization (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=80.0,
+                help="Percentage of available asset capacity/usage level being utilized. Range: 0% to 100%.",
+                label_visibility="collapsed",
+            )
+            input_guide("Demand Forecast", "expected demand in dataset-defined units")
+            demand_forecast = st.number_input(
+                "Demand Forecast (dataset units)",
+                min_value=0.0,
+                value=200.0,
+                help="Expected future demand. The source dataset does not define a specific physical unit for demand.",
+                label_visibility="collapsed",
+            )
         with c2:
-            temperature = st.number_input("Temperature (°C)", value=float(st.session_state.get("pred_temperature", 30.0)))
-            humidity = st.number_input("Humidity (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.get("pred_humidity", 70.0)))
-            waiting_time = st.number_input("Waiting Time", min_value=0.0, value=40.0)
-            transaction_amount = st.number_input("Transaction Amount", min_value=0.0, value=5000.0)
-            purchase_frequency = st.number_input("Purchase Frequency", min_value=0.0, value=5.0)
-            prediction_date = st.date_input("Shipment Date", value=date.today())
+            input_guide("Temperature", "environmental temperature in degrees Celsius (°C)")
+            temperature = st.number_input(
+                "Temperature (°C)",
+                value=float(st.session_state.get("pred_temperature", 30.0)),
+                help="Environmental temperature associated with the shipment conditions. Measured in degrees Celsius (°C).",
+                label_visibility="collapsed",
+            )
+            input_guide("Humidity", "relative humidity (%)")
+            humidity = st.number_input(
+                "Humidity (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=float(st.session_state.get("pred_humidity", 70.0)),
+                help="Relative humidity. Measured as a percentage from 0% to 100%.",
+                label_visibility="collapsed",
+            )
+            input_guide("Waiting Time", "operational waiting duration in the dataset-defined time unit")
+            waiting_time = st.number_input(
+                "Waiting Time (dataset time unit)",
+                min_value=0.0,
+                value=40.0,
+                help="Operational waiting duration. The source dataset does not specify whether this represents minutes, hours, or another time unit.",
+                label_visibility="collapsed",
+            )
+            input_guide("Transaction Amount", "monetary value in the dataset-defined currency")
+            transaction_amount = st.number_input(
+                "Transaction Amount (dataset currency)",
+                min_value=0.0,
+                value=5000.0,
+                help="Monetary transaction value recorded in the dataset. The source dataset does not specify a currency in the dashboard code.",
+                label_visibility="collapsed",
+            )
+            input_guide("Purchase Frequency", "purchase count/frequency in the dataset-defined period")
+            purchase_frequency = st.number_input(
+                "Purchase Frequency (dataset period)",
+                min_value=0.0,
+                value=5.0,
+                help="Number/frequency of purchases recorded for the related user. The source dataset does not specify the time period in the dashboard code.",
+                label_visibility="collapsed",
+            )
+            input_guide("Shipment Date", "calendar date used to derive time-related model features")
+            prediction_date = st.date_input(
+                "Shipment Date",
+                value=date.today(),
+                help="Date used for the prediction. The app derives year, month, day, day of week, and weekend information from this date.",
+                label_visibility="collapsed",
+            )
 
         predict_button = st.form_submit_button(
             "🔮 PREDICT DELAY RISK",
@@ -534,6 +668,7 @@ elif page == "🔮 Delay Predictor":
             summary = pd.DataFrame({
                 "Feature": ["Temperature","Humidity","Waiting Time","Inventory Level","Asset Utilization","Demand Forecast","Temperature Risk","Humidity Risk","Waiting Risk","Inventory Risk"],
                 "Value": [temperature,humidity,waiting_time,inventory,asset_utilization,demand_forecast,temperature_risk,humidity_risk,waiting_risk,inventory_risk],
+                "Measure": ["°C","%","Dataset time unit","Dataset units","%","Dataset units","Category","Category","Category","Category"],
             })
             st.dataframe(summary, use_container_width=True, hide_index=True)
         except Exception as error:
@@ -561,19 +696,19 @@ elif page == "📈 Shipment Analytics":
     c1, c2 = st.columns(2)
     with c1:
         if "Temperature" in filtered_df.columns:
-            fig = px.histogram(filtered_df, x="Temperature", nbins=25, title="Temperature Distribution")
+            fig = px.histogram(filtered_df, x="Temperature", nbins=25, title="Temperature Distribution", labels={"Temperature": "Temperature (°C)"})
             fig.update_layout(template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
     with c2:
         if "Waiting_Time" in filtered_df.columns:
-            fig = px.histogram(filtered_df, x="Waiting_Time", nbins=25, title="Waiting Time Distribution")
+            fig = px.histogram(filtered_df, x="Waiting_Time", nbins=25, title="Waiting Time Distribution", labels={"Waiting_Time": "Waiting Time (dataset time unit)"})
             fig.update_layout(template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
 
     if "Temperature" in filtered_df.columns and "Waiting_Time" in filtered_df.columns:
         fig = px.scatter(filtered_df, x="Temperature", y="Waiting_Time",
                          color="Shipment_Status" if "Shipment_Status" in filtered_df.columns else None,
-                         title="Temperature vs Operational Waiting")
+                         title="Temperature vs Operational Waiting", labels={"Temperature": "Temperature (°C)", "Waiting_Time": "Waiting Time (dataset time unit)"})
         fig.update_layout(template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
@@ -587,18 +722,18 @@ elif page == "🚦 Traffic & Route":
         section_title("Shipment Location Map")
         map_df = df[["Latitude", "Longitude"]].dropna().rename(columns={"Latitude":"lat", "Longitude":"lon"})
         st.map(map_df, use_container_width=True)
-        st.caption("The dataset contains shipment coordinates. The map shows shipment locations; it is not a road-by-road route reconstruction.")
+        st.caption("Latitude and longitude are measured in degrees (°). The map shows shipment locations; it is not a road-by-road route reconstruction.")
 
     if "Traffic_Status" in df.columns:
         section_title("Historical / Dataset Traffic")
         counts = df["Traffic_Status"].value_counts().reset_index()
         counts.columns = ["Traffic Status", "Shipments"]
-        fig = px.bar(counts, x="Traffic Status", y="Shipments", title="Shipment Count by Traffic Condition")
+        fig = px.bar(counts, x="Traffic Status", y="Shipments", title="Shipment Count by Traffic Condition", labels={"Shipments": "Shipments (count)"})
         fig.update_layout(template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
         if "Waiting_Time" in df.columns:
-            fig = px.box(df, x="Traffic_Status", y="Waiting_Time", title="Waiting Time by Traffic Condition")
+            fig = px.box(df, x="Traffic_Status", y="Waiting_Time", title="Waiting Time by Traffic Condition", labels={"Waiting_Time": "Waiting Time (dataset time unit)"})
             fig.update_layout(template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -609,12 +744,16 @@ elif page == "🚦 Traffic & Route":
         default_live_lat = 23.0225
         default_live_lon = 72.5714
         st.markdown("**Live Traffic Location**")
+        st.caption("Latitude / longitude: degrees (°). TomTom live speed: km/h. Congestion and confidence: %.")
         c1, c2, c3 = st.columns([1, 1, 1], gap="medium")
         with c1:
-            live_lat = st.number_input("Latitude", value=default_live_lat, min_value=-90.0, max_value=90.0, key="live_lat")
+            input_guide("Latitude", "live traffic location north-south coordinate in degrees (°)")
+            live_lat = st.number_input("Latitude (°)", value=default_live_lat, min_value=-90.0, max_value=90.0, key="live_lat", help="Geographic north-south coordinate in degrees (°).", label_visibility="collapsed")
         with c2:
-            live_lon = st.number_input("Longitude", value=default_live_lon, min_value=-180.0, max_value=180.0, key="live_lon")
+            input_guide("Longitude", "live traffic location east-west coordinate in degrees (°)")
+            live_lon = st.number_input("Longitude (°)", value=default_live_lon, min_value=-180.0, max_value=180.0, key="live_lon", help="Geographic east-west coordinate in degrees (°).", label_visibility="collapsed")
         with c3:
+            st.write("")
             st.write("")
             fetch_traffic = st.button("🚦 Check Live Traffic", use_container_width=True)
 
@@ -642,19 +781,19 @@ elif page == "🌦 Weather Analysis":
     c1, c2 = st.columns(2)
     with c1:
         if "Temperature" in df.columns:
-            fig = px.histogram(df, x="Temperature", nbins=30, title="Dataset Temperature Distribution")
+            fig = px.histogram(df, x="Temperature", nbins=30, title="Dataset Temperature Distribution", labels={"Temperature": "Temperature (°C)"})
             fig.update_layout(template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
     with c2:
         if "Humidity" in df.columns:
-            fig = px.histogram(df, x="Humidity", nbins=30, title="Dataset Humidity Distribution")
+            fig = px.histogram(df, x="Humidity", nbins=30, title="Dataset Humidity Distribution", labels={"Humidity": "Humidity (%)"})
             fig.update_layout(template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
 
     if "Temperature" in df.columns and "Humidity" in df.columns:
         fig = px.scatter(df, x="Temperature", y="Humidity",
                          color="Traffic_Status" if "Traffic_Status" in df.columns else None,
-                         title="Dataset Temperature vs Humidity")
+                         title="Dataset Temperature vs Humidity", labels={"Temperature": "Temperature (°C)", "Humidity": "Humidity (%)"})
         fig.update_layout(template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
@@ -671,18 +810,21 @@ elif page == "🌦 Weather Analysis":
             with c2: kpi_card("HUMIDITY", f"{live['humidity']:.0f}%", "Current")
             with c3: kpi_card("PRECIPITATION", f"{live['precipitation']:.1f} mm", "Current")
             with c4: kpi_card("WIND", f"{live['wind_speed']:.1f} km/h", "Current")
-            st.caption(f"Weather time: {live['time']} • Timezone: {live['timezone']}")
+            st.caption(f"Units: temperature °C • humidity % • precipitation mm • wind km/h | Weather time: {live['time']} • Timezone: {live['timezone']}")
         except Exception as error:
             st.error(f"Live weather request failed: {error}")
 
     section_title("Historical Weather for a Shipment Date")
     hc1, hc2, hc3 = st.columns(3)
     with hc1:
-        hist_lat = st.number_input("Historical Latitude", value=20.5, min_value=-90.0, max_value=90.0)
+        input_guide("Historical Latitude", "geographic coordinate in degrees (°)")
+        hist_lat = st.number_input("Historical Latitude (°)", value=20.5, min_value=-90.0, max_value=90.0, help="Latitude in degrees (°).", label_visibility="collapsed")
     with hc2:
-        hist_lon = st.number_input("Historical Longitude", value=72.9, min_value=-180.0, max_value=180.0)
+        input_guide("Historical Longitude", "geographic coordinate in degrees (°)")
+        hist_lon = st.number_input("Historical Longitude (°)", value=72.9, min_value=-180.0, max_value=180.0, help="Longitude in degrees (°).", label_visibility="collapsed")
     with hc3:
-        hist_date = st.date_input("Historical Date", value=date(2024, 7, 1))
+        input_guide("Historical Date", "calendar date used to retrieve archived weather")
+        hist_date = st.date_input("Historical Date", value=date(2024, 7, 1), label_visibility="collapsed")
 
     if st.button(
         "📅 Load Historical Weather",
@@ -700,7 +842,7 @@ elif page == "🌦 Weather Analysis":
                 with c3: kpi_card("TOTAL PRECIP.", f"{historical['precipitation'].sum():.1f} mm", "Selected date")
                 with c4: kpi_card("AVG WIND", f"{historical['wind_speed_10m'].mean():.1f} km/h", "Selected date")
                 chart_df = historical[["time","temperature_2m","relative_humidity_2m"]].copy()
-                fig = px.line(chart_df, x="time", y=["temperature_2m","relative_humidity_2m"], title="Historical Hourly Weather")
+                fig = px.line(chart_df, x="time", y=["temperature_2m","relative_humidity_2m"], title="Historical Hourly Weather", labels={"temperature_2m": "Temperature (°C)", "relative_humidity_2m": "Humidity (%)", "value": "Value"})
                 fig.update_layout(template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
         except Exception as error:
@@ -719,6 +861,7 @@ elif page == "🏭 Supplier / Asset Performance":
         delay_summary = df.groupby("Asset_ID")["Delay_Flag"].mean().reset_index()
         delay_summary["Delay Rate"] = delay_summary["Delay_Flag"] * 100
         asset_summary = asset_summary.merge(delay_summary[["Asset_ID","Delay Rate"]], on="Asset_ID", how="left")
+        st.caption("Shipments = record count. Average Waiting Time = dataset-defined time unit. Delay Rate = percentage of delayed records observed for the asset.")
         st.dataframe(
             asset_summary.sort_values("Shipments", ascending=False),
             use_container_width=True,
@@ -726,11 +869,11 @@ elif page == "🏭 Supplier / Asset Performance":
             column_config={
                 "Asset_ID": st.column_config.Column(width="small"),
                 "Shipments": st.column_config.Column(width="small"),
-                "Average_Waiting_Time": st.column_config.Column(width="medium"),
-                "Delay Rate": st.column_config.Column(width="small"),
+                "Average_Waiting_Time": st.column_config.Column("Average Waiting Time (dataset time unit)", width="medium"),
+                "Delay Rate": st.column_config.Column("Delay Rate (%)", width="small"),
             },
         )
-        fig = px.bar(asset_summary.sort_values("Delay Rate", ascending=False).head(20), x="Asset_ID", y="Delay Rate", title="Assets by Observed Delay Rate")
+        fig = px.bar(asset_summary.sort_values("Delay Rate", ascending=False).head(20), x="Asset_ID", y="Delay Rate", title="Assets by Observed Delay Rate", labels={"Delay Rate": "Delay Rate (%)", "Asset_ID": "Asset / Supplier ID"})
         fig.update_layout(template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
@@ -747,7 +890,7 @@ elif page == "🤖 AI Insights":
         with c2: kpi_card("ACCURACY", f"{metrics.get('accuracy',0)*100:.1f}%", "Held-out test set")
         with c3: kpi_card("PRECISION", f"{metrics.get('precision',0)*100:.1f}%", "Delay class")
         with c4: kpi_card("F1 SCORE", f"{metrics.get('f1',0)*100:.1f}%", "Balanced metric")
-        st.caption("These metrics come from a single 80/20 stratified split of the supplied dataset. They are not evidence of production-level model performance.")
+        st.caption("Units: Accuracy, Precision, and F1 Score are percentages (%). Model metrics come from a single 80/20 stratified split of the supplied dataset and are not evidence of production-level performance.")
 
     section_title("Key Data Insights")
     insights = []
@@ -756,7 +899,7 @@ elif page == "🤖 AI Insights":
         if len(traffic_delay):
             insights.append(f"🚦 Traffic: {traffic_delay.index[0]} has the highest observed delay rate ({traffic_delay.iloc[0]*100:.1f}%) in this dataset.")
     if "Waiting_Time" in df.columns:
-        insights.append(f"⏱️ Waiting Time: average operational waiting time is {df['Waiting_Time'].mean():.1f}.")
+        insights.append(f"⏱️ Waiting Time: average operational waiting time is {df['Waiting_Time'].mean():.1f} (dataset time unit).")
     if "Temperature" in df.columns:
         insights.append(f"🌡️ Temperature: observed values range from {df['Temperature'].min():.1f} to {df['Temperature'].max():.1f} °C.")
     if "Humidity" in df.columns:
